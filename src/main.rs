@@ -27,7 +27,7 @@ use crossterm::{
 use std::collections::VecDeque;
 use std::io::stdout;
 use std::process::Child;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{OnceLock, RwLock, mpsc};
 use std::thread;
 use std::time::Duration;
@@ -116,6 +116,7 @@ static LIBRARY_SONG_LIST: RwLock<Vec<SongDetails>> = RwLock::new(Vec::new());
 //CONTAINS PLAYLIST ID SO AUTOPLAY CAN FETCH FROM THE SAME LIBRARY
 static PLAYING_FROM_LIBRARY: RwLock<Option<(String, bool)>> = RwLock::new(None);
 pub static LYRIC_OFFSET: AtomicI64 = AtomicI64::new(0);
+static AUTOPLAY_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -347,10 +348,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                             // CASE 2.1.2 : IF USER IS IN ONLINE MODE (CALL AUTO ADD FUNCTION)
                                             // -------------------------------------------------------------------
                                             else if let Some(vid) = &track.video_id {
+                                                let generation = AUTOPLAY_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
                                                 let yt = yt_client.clone();
                                                 let v = vid.clone();
                                                 tokio::spawn(async move {
-                                                    queue_auto_add_online(yt, v).await;
+                                                    queue_auto_add_online(yt, v, generation).await;
                                                 });
                                             }
                                         }
@@ -615,21 +617,18 @@ async fn handle_global_commands(
                     if let Ok(playlists) = yt_client.fetch_library_playlists().await {
                         show_playlists(&playlists);
 
-                        if let Ok(sel_str) = rx.recv() {
-                            let sel = sel_str.trim().parse::<usize>().unwrap_or(0);
-                            if sel >= 1 && sel <= playlists.len() {
-                                let selected_playlist_id = playlists[sel - 1].playlist_id.clone();
+                        if let Some(sel) = read_number_selection(rx, playlists.len()) {
+                            let selected_playlist_id = playlists[sel - 1].playlist_id.clone();
 
-                                tokio::spawn(async move {
-                                    match yt.add_to_playlist(&selected_playlist_id, &video_id).await
-                                    {
-                                        Ok(_) => {
-                                            set_status_line(Some("Added to Playlist!".to_string()))
-                                        }
-                                        Err(e) => set_status_line(Some(format!(":( Error: {}", e))),
+                            tokio::spawn(async move {
+                                match yt.add_to_playlist(&selected_playlist_id, &video_id).await
+                                {
+                                    Ok(_) => {
+                                        set_status_line(Some("Added to Playlist!".to_string()))
                                     }
-                                });
-                            }
+                                    Err(e) => set_status_line(Some(format!(":( Error: {}", e))),
+                                }
+                            });
                         }
                     }
                 }
@@ -724,10 +723,12 @@ async fn handle_global_commands(
                                 let mut q = SONG_QUEUE.write().unwrap();
                                 offline::populate_queue_offline(music_dir, &mut q, &exclude);
                             } else if let Some(vid) = &track.video_id {
+                                // Bump generation for new autoplay session
+                                let generation = AUTOPLAY_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
                                 let yt = yt_client.clone();
                                 let v = vid.clone();
                                 tokio::spawn(async move {
-                                    queue_auto_add_online(yt, v).await;
+                                    queue_auto_add_online(yt, v, generation).await;
                                 });
                             }
                         }
@@ -943,12 +944,13 @@ pub async fn handle_song_selection(
             *currently_playing = Some(player::play_file(&new_track.url, &new_track, &music_dir)?);
 
             if !config().no_autoplay {
+                let generation = AUTOPLAY_GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
                 let yt = yt_client.clone();
                 let vid = selected.video_id.clone();
                 SONG_QUEUE.write().unwrap().clear();
                 RELATED_SONG_LIST.write().unwrap().clear();
                 tokio::spawn(async move {
-                    queue_auto_add_online(yt, vid).await;
+                    queue_auto_add_online(yt, vid, generation).await;
                 });
             }
             refresh_ui(Some(&new_track));
@@ -961,6 +963,41 @@ pub async fn handle_song_selection(
 }
 
 use rand::seq::IndexedRandom;
+
+fn read_number_selection(
+    rx: &std::sync::mpsc::Receiver<String>,
+    max: usize,
+) -> Option<usize> {
+    let mut buf = String::new();
+
+    loop {
+        match rx.recv() {
+            Ok(msg) => {
+                if msg.starts_with("digit:") {
+                    buf.push_str(&msg[6..]);
+                } else if msg == "enter" {
+                    if buf.is_empty() {
+                        return None;
+                    }
+                    let n: usize = buf.parse().ok()?;
+                    if (1..=max).contains(&n) {
+                        return Some(n);
+                    }
+                    return None;
+                } else if msg == "backspace" {
+                    buf.pop();
+                } else if msg.is_empty() || msg == "REFRESH_UI" {
+                    return None;
+                } else {
+                    // Non-digit input, stop buffering
+                    return None;
+                }
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
 async fn handle_library_browsing(
     rx: &std::sync::mpsc::Receiver<String>,
     yt_client: &api::YTMusic,
@@ -973,16 +1010,11 @@ async fn handle_library_browsing(
     let playlists = yt_client.fetch_library_playlists().await?;
     show_playlists(&playlists);
 
-    // waiting for playlist selection
-    let sel_str = match rx.recv() {
-        Ok(s) => s,
-        _ => return Ok(()),
+    // waiting for playlist selection - now buffered for multi-digit numbers
+    let sel = match read_number_selection(rx, playlists.len()) {
+        Some(n) => n,
+        None => return Ok(()),
     };
-    let sel = sel_str.trim().parse::<usize>().unwrap_or(0);
-
-    if sel < 1 || sel > playlists.len() {
-        return Ok(());
-    }
 
     let selected_playlist = &playlists[sel - 1];
     set_status_line(Some(format!("Loading '{}'...", selected_playlist.title)));
@@ -1159,13 +1191,18 @@ fn if_title_contains_non_english_and_other_language_script_return_only_english_p
         .join(" ")
 }
 
-pub async fn queue_auto_add_online(yt: api::YTMusic, id: String) {
+pub async fn queue_auto_add_online(yt: api::YTMusic, id: String, generation: u64) {
     let needs_songs = {
         let q = SONG_QUEUE.read().unwrap();
         q.len() < 2
     };
 
     if needs_songs {
+        // check if this task is still the current generation
+        if AUTOPLAY_GENERATION.load(Ordering::SeqCst) != generation {
+            return;
+        }
+
         // check if saved related songs are exhausted
         let cache_empty = {
             let c = RELATED_SONG_LIST.read().unwrap();
@@ -1187,6 +1224,11 @@ pub async fn queue_auto_add_online(yt: api::YTMusic, id: String) {
                 .fetch_related_songs(&id, playlist_id.as_deref(), 50, should_suffle)
                 .await
             {
+                // Check generation again before mutating
+                if AUTOPLAY_GENERATION.load(Ordering::SeqCst) != generation {
+                    return;
+                }
+
                 let mut c = RELATED_SONG_LIST.write().unwrap();
                 for song in related {
                     c.push(song);
@@ -1303,7 +1345,15 @@ pub fn spawn_input_handler(tx: Sender<String>) {
                             }
 
                             KeyCode::Char(c) if c.is_ascii_digit() => {
-                                let _ = tx.send(c.to_string());
+                                let _ = tx.send(format!("digit:{}", c));
+                            }
+
+                            KeyCode::Enter => {
+                                let _ = tx.send("enter".into());
+                            }
+
+                            KeyCode::Backspace => {
+                                let _ = tx.send("backspace".into());
                             }
 
                             KeyCode::Char('L') => {
