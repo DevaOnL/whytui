@@ -19,31 +19,43 @@ UI 1             |  UI 2                               | UI 3
 
 ## Installation
 
-#### Requirements: `mpv` installed and in PATH
+### Runtime Dependencies
 
+**Required for all modes:**
+- `mpv` — for audio playback on all platforms
 
-1. Linux:
+**Required for online playback:**
+- `yt-dlp` — for resolving YouTube Music stream URLs
 
+**Required for downloading/saving tracks:**
+- `ffmpeg` — for audio format conversion and tagging
+
+**For authenticated YouTube Music features:**
+- Netscape-format cookies file (see usage notes below)
+
+### Install dependencies
+
+**Linux (Ubuntu/Debian):**
 ```bash
-curl -L -o whytui https://github.com/shreyas-sha3/whytui/releases/download/Latest/whytui-linux-x86_64 && chmod +x whytui && sudo mv whytui /usr/local/bin/
-````
-
-2. MacOS:
-```bash
-brew install mpv
+sudo apt-get install mpv yt-dlp ffmpeg
 ```
+
+**Linux (Fedora):**
 ```bash
-curl -L -o whytui https://github.com/shreyas-sha3/whytui/releases/download/Latest/whytui-macos-x86_64 && chmod +x whytui && sudo mv whytui /usr/local/bin/
+sudo dnf install mpv yt-dlp ffmpeg
 ```
 
-3. Windows:
+**macOS:**
 ```bash
-winget install mpv
+brew install mpv yt-dlp ffmpeg
 ```
+
+**Windows (via Winget):**
 ```bash
-curl.exe -L -o whytui.exe https://github.com/shreyas-sha3/whytui/releases/download/Latest/whytui-win-x86_64.exe && move whytui.exe C:\Windows\
+winget install vidMob.mpv yt-dlp.yt-dlp ffmpeg
 ```
-[oneliner for cmd as administrator]
+
+### Installation from releases
  
 ## Usage
 - Press `/` and type to search for a song
@@ -72,13 +84,16 @@ curl.exe -L -o whytui.exe https://github.com/shreyas-sha3/whytui/releases/downlo
 
 
 * Arguments:
-  * `-d` | `--download` to just play offline songs
-  * `-o` | `--offline` to just play offline songs
-  * `-n` | `--nomix` to disable autoplay
-  * `-l` | `--lossless` to attempt fetching lossless audio
-  * `-g` | `--guess` try guessing currently playing song quality
+  * `-d` | `--download` — download/save selected tracks for offline playback (requires ffmpeg)
+  * `-o` | `--offline` — play only from the local offline library
+  * `-n` | `--nomix` — disable autoplay/mix mode
+  * `-l` | `--lossless` — attempt to fetch lossless (FLAC) audio where available
+  * `-g` | `--guess` — try guessing current track quality
 
-* Note: Netscape cookies can be added at `$MusicDir/whytui/config/cookies.txt`
+* Setup:
+  * Netscape-format cookies file can be placed at `~/.config/whytui/config/cookies.txt` for authenticated YouTube Music features
+  * To export cookies: Use a browser extension like "NetscapeHttpCookieFormat" on sites.google.com or similar
+  * Without cookies, the app works in guest/limited mode
 
 
 ## TODO

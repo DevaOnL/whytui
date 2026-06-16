@@ -137,7 +137,20 @@ impl YTMusic {
 
     async fn post_auth(&self, endpoint: &str, body: &Value) -> Result<Value, Box<dyn Error>> {
         let res = self.auth_client.post(endpoint).json(body).send().await?;
-        if !res.status().is_success() {}
+
+        let status = res.status();
+        if !status.is_success() {
+            let error_body = res
+                .text()
+                .await
+                .unwrap_or_else(|_| "<failed to read error body>".to_string());
+
+            return Err(format!(
+                "Authenticated API request failed: {} {}: {}",
+                status, endpoint, error_body
+            ).into());
+        }
+
         Ok(res.json().await?)
     }
 

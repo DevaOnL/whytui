@@ -143,7 +143,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //set cookie path
     let cookies_path = music_dir.join("config/cookies.txt");
     //Custom unofficial apiz ( call with cookies if available)
-    let yt_client = api::YTMusic::new_with_cookies(cookies_path.to_str().unwrap()).unwrap();
+    let cookies_str = cookies_path
+        .to_str()
+        .ok_or_else(|| format!("Cookies path is not valid UTF-8: {:?}", cookies_path))?;
+
+    let yt_client = api::YTMusic::new_with_cookies(cookies_str)
+        .map_err(|e| format!("Failed to load YouTube Music cookies from {}: {}", cookies_str, e))?;
     //mpv handle to extract child and stop songs if needed
     let mut currently_playing: Option<Child> = None;
     //contains song details (including vid_id for online songs)
@@ -708,25 +713,33 @@ async fn handle_global_commands(
             if let Some(track) = queue_next() {
                 ui_common::clear_lyrics();
                 *current_track = Some(track.clone());
-                *currently_playing =
-                    Some(player::play_file(&track.url, &track, music_dir).unwrap());
 
-                if !config().no_autoplay {
-                    if config().offline_mode {
-                        let exclude = get_excluded_titles();
-                        let mut q = SONG_QUEUE.write().unwrap();
-                        offline::populate_queue_offline(music_dir, &mut q, &exclude);
-                    } else if let Some(vid) = &track.video_id {
-                        let yt = yt_client.clone();
-                        let v = vid.clone();
-                        tokio::spawn(async move {
-                            queue_auto_add_online(yt, v).await;
-                        });
+                match player::play_file(&track.url, &track, music_dir) {
+                    Ok(child) => {
+                        *currently_playing = Some(child);
+
+                        if !config().no_autoplay {
+                            if config().offline_mode {
+                                let exclude = get_excluded_titles();
+                                let mut q = SONG_QUEUE.write().unwrap();
+                                offline::populate_queue_offline(music_dir, &mut q, &exclude);
+                            } else if let Some(vid) = &track.video_id {
+                                let yt = yt_client.clone();
+                                let v = vid.clone();
+                                tokio::spawn(async move {
+                                    queue_auto_add_online(yt, v).await;
+                                });
+                            }
+                        }
+
+                        refresh_ui(Some(&track));
+                        set_status_line(Some("PLAYING NEXT".into()));
+                    }
+                    Err(e) => {
+                        ui_common::set_status_line(Some(format!("Failed to start playback: {}", e)));
+                        *current_track = None;
                     }
                 }
-
-                refresh_ui(Some(&track));
-                set_status_line(Some("PLAYING NEXT".into()));
             } else {
                 *current_track = None;
                 // refresh_ui(None);
@@ -744,10 +757,18 @@ async fn handle_global_commands(
                     queue_add_front(track.clone());
 
                     *current_track = Some(prev_track.clone());
-                    *currently_playing =
-                        Some(player::play_file(&prev_track.url, &prev_track, music_dir).unwrap());
-                    refresh_ui(Some(&prev_track));
-                    set_status_line(Some(format!("PLAYING PREVIOUS")));
+
+                    match player::play_file(&prev_track.url, &prev_track, music_dir) {
+                        Ok(child) => {
+                            *currently_playing = Some(child);
+                            refresh_ui(Some(&prev_track));
+                            set_status_line(Some(format!("PLAYING PREVIOUS")));
+                        }
+                        Err(e) => {
+                            ui_common::set_status_line(Some(format!("Failed to start playback: {}", e)));
+                            *current_track = None;
+                        }
+                    }
                 }
             }
             return true;
