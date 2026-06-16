@@ -32,6 +32,7 @@ use std::sync::{OnceLock, RwLock, mpsc};
 use std::thread;
 use std::time::Duration;
 use tokio::time;
+use rand::seq::IndexedRandom;
 // -------------------------------------------------------------------
 // DATA STRUCTURES
 // -------------------------------------------------------------------
@@ -961,8 +962,6 @@ pub async fn handle_song_selection(
 
     Ok(())
 }
-
-use rand::seq::IndexedRandom;
 
 fn read_number_selection(
     rx: &std::sync::mpsc::Receiver<String>,
