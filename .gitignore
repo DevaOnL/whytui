@@ -5,3 +5,12 @@ MacOSX13.3.sdk
 *.txt
 *.lock
 /for_github
+
+# Analysis and documentation files - for local reference only
+Findings.md
+Dev_Findings.md
+Claude_Findings.md
+Claude_Findings_Validation.md
+Claude_Plan_Review.md
+plan.md
+final_plan.md
