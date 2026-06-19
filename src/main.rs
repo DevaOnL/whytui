@@ -1300,7 +1300,7 @@ pub fn spawn_input_handler(tx: Sender<String>) {
                                 set_status_line(Some("Search a Song".to_string()));
                                 loop {
                                     print!("\r\x1b[2K{} {}█", prompt, query);
-                                    io::stdout().flush().unwrap();
+                                    let _ = io::stdout().flush();
 
                                     if let Ok(Event::Key(k)) = event::read() {
                                         if k.kind != KeyEventKind::Press {
