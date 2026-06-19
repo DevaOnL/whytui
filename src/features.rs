@@ -43,6 +43,12 @@ fn duration_to_seconds(d: &str) -> String {
         let mins: u32 = parts[0].parse().unwrap_or(0);
         let secs: u32 = parts[1].parse().unwrap_or(0);
         return (mins * 60 + secs).to_string();
+    } else if parts.len() == 3 {
+        // Handle h:mm:ss format
+        let hours: u32 = parts[0].parse().unwrap_or(0);
+        let mins: u32 = parts[1].parse().unwrap_or(0);
+        let secs: u32 = parts[2].parse().unwrap_or(0);
+        return (hours * 3600 + mins * 60 + secs).to_string();
     }
     d.to_string()
 }
@@ -234,18 +240,37 @@ async fn romanize_lyrics_google(
 pub fn parse_lrc(lrc: &str) -> Vec<LrcLine> {
     let mut lines = Vec::new();
     for line in lrc.lines() {
-        if let Some(start) = line.find('[') {
-            if let Some(end) = line.find(']') {
-                let ts = &line[start + 1..end];
-                let text = line[end + 1..].trim().to_string();
+        // Extract all [timestamp] patterns from the line
+        let mut timestamps = Vec::new();
+        let mut remaining = line;
+
+        while let Some(start) = remaining.find('[') {
+            if let Some(end) = remaining[start..].find(']') {
+                let end_pos = start + end;
+                let ts = &remaining[start + 1..end_pos];
+
                 if let Some(dur) = parse_timestamp(ts) {
-                    lines.push(LrcLine {
-                        timestamp: dur,
-                        text,
-                        translation: None,
-                        romanized: None,
-                    });
+                    timestamps.push(dur);
                 }
+
+                remaining = &remaining[end_pos + 1..];
+            } else {
+                break;
+            }
+        }
+
+        // Extract text after the last timestamp
+        if let Some(last_bracket_pos) = line.rfind(']') {
+            let text = line[last_bracket_pos + 1..].trim().to_string();
+
+            // Create an LrcLine for each timestamp
+            for timestamp in timestamps {
+                lines.push(LrcLine {
+                    timestamp,
+                    text: text.clone(),
+                    translation: None,
+                    romanized: None,
+                });
             }
         }
     }
@@ -260,6 +285,17 @@ fn parse_timestamp(ts: &str) -> Option<Duration> {
     }
     let minutes: u64 = parts[0].parse().ok()?;
     let seconds: f64 = parts[1].parse().ok()?;
+
+    // Validate seconds are in valid range (0-60)
+    if !(0.0..=60.0).contains(&seconds) || seconds.is_nan() {
+        return None;
+    }
+
+    // Cap at reasonable song duration (12 hours)
+    if minutes > 12 * 60 {
+        return None;
+    }
+
     let total_ms = ((minutes as f64) * 60.0 + seconds) * 1000.0;
     Some(Duration::from_millis(total_ms as u64))
 }
