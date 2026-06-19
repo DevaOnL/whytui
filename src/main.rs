@@ -199,25 +199,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ----------------------------------------------------------------------------------
 
     // -------------------------------------------------------------------
-    // RESTRICTION: ENFORCE MINIMUM TERMINAL SIZE
+    // TERMINAL SIZE: Support standard 80x24 or larger
     // -------------------------------------------------------------------
-    let min_width = 52;
-    let min_height = 37;
+    let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
-    loop {
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((0, 0));
-
-        if cols >= min_width && rows >= min_height {
-            break;
-            execute!(stdout(), Clear(ClearType::All));
-        }
-        execute!(stdout(), Clear(ClearType::All));
-        println!("Breh Terminal too small!");
-        println!("Current: {}x{}", cols, rows);
-        println!("Required: {}x{}", min_width, min_height);
-        println!("Resize your window >_<");
-
-        std::thread::sleep(std::time::Duration::from_millis(500));
+    if cols < 60 || rows < 20 {
+        eprintln!("Warning: Terminal is small ({}x{}). Some UI elements may not display correctly.", cols, rows);
+        eprintln!("Recommended minimum: 80x24 or larger.");
     }
     // ----------------------------------------------------------------------------------
     // CASE 1 : IF OFFLINE MODE INITIAL FETCH RANDOM SONG + POPULATE QUEUE
@@ -1075,12 +1063,15 @@ async fn handle_library_browsing(
                     }
                 }
                 "s" => {
-                    let list = LIBRARY_SONG_LIST.read().unwrap();
+                    let song_to_play = {
+                        let list = LIBRARY_SONG_LIST.read().unwrap();
+                        list.choose(&mut rand::rng()).cloned()
+                    };
 
-                    if let Some(song) = list.choose(&mut rand::rng()) {
+                    if let Some(song) = song_to_play {
                         handle_song_selection(
                             "1".into(),
-                            &[song.clone()],
+                            &[song],
                             music_dir,
                             yt_client,
                             current_track,
