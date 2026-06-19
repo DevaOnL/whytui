@@ -9,10 +9,10 @@ use serde_json::{Value, json};
 use sha1::{Digest, Sha1};
 use std::error::Error;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::io::Write;
+use std::io::{BufRead, BufReader};
 use std::process::Command;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone)]
 pub struct SongDetails {
@@ -148,7 +148,8 @@ impl YTMusic {
             return Err(format!(
                 "Authenticated API request failed: {} {}: {}",
                 status, endpoint, error_body
-            ).into());
+            )
+            .into());
         }
 
         Ok(res.json().await?)
@@ -202,7 +203,6 @@ impl YTMusic {
     //         println!("> Debug: Request payload written to debug_req.json");
     //     }
 
-
     //     let res = self.guest_client
     //         .post("https://music.youtube.com/youtubei/v1/player?key=AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30")
     //         .json(&payload)
@@ -215,7 +215,6 @@ impl YTMusic {
     //         let _ = file.write_all(serde_json::to_string_pretty(&data).unwrap().as_bytes());
     //         println!("> Debug: Response data written to debug_res.json");
     //     }
-
 
     //     if let Some(status) = data
     //         .pointer("/playabilityStatus/status")
@@ -257,7 +256,6 @@ impl YTMusic {
     //
 
     //OG method not working? temp replacement
-
 
     pub async fn fetch_stream_url(&self, video_id: &str) -> Result<String, Box<dyn Error>> {
         let video_url = format!("https://music.youtube.com/watch?v={}", video_id);

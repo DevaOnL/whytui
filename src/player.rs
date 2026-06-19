@@ -32,7 +32,7 @@ pub fn play_file(
     } else {
         crate::PLAYING_LOSSLESS.store(false, Ordering::SeqCst);
     }
-let user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36,gzip(gfe)";
+    let user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36,gzip(gfe)";
     let mut cmd = Command::new("mpv");
     cmd.arg("--no-video")
         .arg("--really-quiet")
