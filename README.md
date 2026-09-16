@@ -19,8 +19,37 @@ UI 1             |  UI 2                               | UI 3
 
 ## Installation
 
-#### Requirements: `mpv` installed and in PATH
+#### Runtime requirements
 
+- `mpv` — required for audio playback.
+- `yt-dlp` — required for online YouTube Music stream resolution.
+- A **yt-dlp PO token provider** — required for playback to work at all. YouTube now refuses to serve
+  the stream URLs of the clients that need no token (`android_vr` resolves fine, then every request
+  for the audio returns HTTP 403), while the `web` clients are SABR-only and hand back no direct URL.
+  whytui therefore asks yt-dlp for the `tv_simply` client, which needs a PO token but does still yield
+  a servable URL. Without a provider installed, yt-dlp cannot produce that token, whytui falls back to
+  the default client, and every song fails with "Stream refused by YouTube (403)".
+
+  Install [bgutil-ytdlp-pot-provider](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) — the
+  script mode needs no server, just Node or Deno:
+
+  ```bash
+  # 1. the yt-dlp plugin
+  mkdir -p ~/.config/yt-dlp/plugins/bgutil
+  curl -sL -o /tmp/pot.zip https://github.com/Brainicism/bgutil-ytdlp-pot-provider/releases/latest/download/bgutil-ytdlp-pot-provider.zip
+  unzip -q -o /tmp/pot.zip -d ~/.config/yt-dlp/plugins/bgutil
+
+  # 2. the token generator it shells out to
+  curl -sL https://github.com/Brainicism/bgutil-ytdlp-pot-provider/archive/refs/tags/1.3.2.tar.gz | tar xz -C /tmp
+  mkdir -p ~/bgutil-ytdlp-pot-provider
+  cp -r /tmp/bgutil-ytdlp-pot-provider-1.3.2/server ~/bgutil-ytdlp-pot-provider/server
+  cd ~/bgutil-ytdlp-pot-provider/server && deno install --allow-scripts   # or: npm install && npm run build
+  ```
+
+  Check it took with `yt-dlp -v --simulate <any youtube url> 2>&1 | grep "PO Token Providers"` — the
+  bgutil entry should not say `unavailable`.
+- `ffmpeg` — required for downloading/caching tracks.
+- YouTube Music cookies — required for authenticated features such as library, like, and playlist modification.
 
 1. Linux:
 
@@ -72,13 +101,17 @@ curl.exe -L -o whytui.exe https://github.com/shreyas-sha3/whytui/releases/downlo
 
 
 * Arguments:
-  * `-d` | `--download` to just play offline songs
-  * `-o` | `--offline` to just play offline songs
-  * `-n` | `--nomix` to disable autoplay
-  * `-l` | `--lossless` to attempt fetching lossless audio
-  * `-g` | `--guess` try guessing currently playing song quality
+  * `-d`, `--download` — save/cache tracks while playing. A track is kept once you have heard at
+    least 90% of it, so skipping near the end still saves it while skipping early does not. The copy
+    is taken from the stream as it plays (no second download), tagged with title/artist/album and
+    cover art, and dropped into the music dir where offline mode picks it up.
+  * `-o`, `--offline` — play only from the local offline library.
+  * `-n`, `--nomix` — disable autoplay/auto-queue.
+  * `-l`, `--lossless` — attempt lossless stream fetching.
+  * `-pl`, `--peak-lossless` — request peak lossless quality where supported.
+  * `-g`, `--guess` — enable quality guessing mode.
 
-* Note: Netscape cookies can be added at `$MusicDir/whytui/config/cookies.txt`
+* Cookies can be placed at `$MusicDir/whytui/config/cookies.txt` in Netscape cookie format.
 
 
 ## TODO
